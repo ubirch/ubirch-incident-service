@@ -16,9 +16,6 @@ EXPOSE 9020
 # for prometheus metrics
 EXPOSE 4321
 
-COPY src/certs/truststore-prod.jks /usr/share/service/lib/truststore-prod.jks
-COPY src/certs/truststore-devtest.jks /usr/share/service/lib/truststore-devtest.jks
-
 ENTRYPOINT [ \
   "/bin/bash", \
   "-c", \
