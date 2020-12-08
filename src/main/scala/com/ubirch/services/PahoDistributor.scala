@@ -28,9 +28,9 @@ class PahoDistributor @Inject()(config: Config) extends DistributorBase with Str
       connOpts.setUserName(userName)
       connOpts.setPassword(password.toCharArray)
       connOpts.setCleanSession(true)
-      System.out.println("MQTT Client connecting to broker: " + broker)
+      logger.info("MQTT Client connecting to broker: " + broker)
       client.connect(connOpts)
-      System.out.println("MQTT Client connected.")
+      logger.info("MQTT Client connected.")
       client
     } catch {
       case me: MqttException =>
