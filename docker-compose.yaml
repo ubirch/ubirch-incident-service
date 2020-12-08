@@ -1,0 +1,39 @@
+version: '3.3'
+services:
+  redis-incident:
+    container_name: redis-incident
+    image: redis:5.0.5
+    ports:
+      - 6379:6379
+    logging:
+      driver: none
+
+  zookeeper-incident:
+    container_name: zookeeper-incident
+    image: 'bitnami/zookeeper:latest'
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    ports:
+      - 2181:2181
+    tmpfs: "/datalog"
+    logging:
+      driver: none
+
+  trackle-incident:
+    container_name: kafka-incident
+    image: 'bitnami/kafka:latest'
+    ports:
+      - 9092:9092
+      - 29092:29092
+    environment:
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_BROKER_ID=1
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper-incident:2181
+      - KAFKA_CFG_LISTENERS=INSIDE://:29092,OUTSIDE://127.0.0.1:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=INSIDE://:29092,OUTSIDE://127.0.0.1:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INSIDE
+    depends_on:
+      - zookeeper-incident
+#    logging:
+#        driver:none
