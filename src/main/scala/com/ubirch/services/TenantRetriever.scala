@@ -3,7 +3,7 @@ package com.ubirch.services
 import com.softwaremill.sttp._
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
-import com.ubirch.models.Device
+import com.ubirch.models.SimpleDeviceInfo
 import com.ubirch.niomon.cache.RedisCache
 import com.ubirch.values.ConfPaths.TenantRetrieverConf
 import org.json4s.ext.{JavaTypesSerializers, JodaTimeSerializers}
@@ -23,7 +23,7 @@ class TenantRetriever @Inject()(config: Config, redis: RedisCache) extends Stric
   implicit val json4sJacksonFormats: Formats = DefaultFormats.lossless ++ JavaTypesSerializers.all ++ JodaTimeSerializers.all
   private val ttlMinutesRedisDeviceMap: Long = config.getLong(TenantRetrieverConf.TTL_REDIS_DEVICE_MAP)
 
-  def getDevice(hwId: String, token: String): Option[Device] = {
+  def getDevice(hwId: String, token: String): Option[SimpleDeviceInfo] = {
     getDeviceCached(hwId) match {
 
       case None =>
@@ -31,7 +31,7 @@ class TenantRetriever @Inject()(config: Config, redis: RedisCache) extends Stric
           case Left(ex) => throw ex
           case Right(deviceJson) =>
             cacheDevice(hwId, deviceJson)
-            Some(read[Device](deviceJson))
+            Some(read[SimpleDeviceInfo](deviceJson))
         }
       case deviceOpt =>
         deviceOpt
@@ -43,14 +43,14 @@ class TenantRetriever @Inject()(config: Config, redis: RedisCache) extends Stric
   }
 
 
-  private[services] def getDeviceCached(hwId: String): Option[Device] = {
+  private[services] def getDeviceCached(hwId: String): Option[SimpleDeviceInfo] = {
 
     redisMap.get(hwId) match {
       case deviceJson: String =>
         try {
           //Todo: Does this make sense?
           updateTTL(hwId, deviceJson)
-          Some(read[Device](deviceJson))
+          Some(read[SimpleDeviceInfo](deviceJson))
         } catch {
           case ex: Throwable => logger.error("something went wrong parsing a device from redis cache", ex)
             None

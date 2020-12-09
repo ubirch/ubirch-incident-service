@@ -5,7 +5,7 @@ import com.typesafe.config.{Config, ConfigValueFactory}
 import com.typesafe.scalalogging.StrictLogging
 import com.ubirch.TestBase
 import com.ubirch.kafka.util.PortGiver
-import com.ubirch.models.{Attributes, Device, Incident, Owner}
+import com.ubirch.models.{Incident, SimpleDeviceInfo}
 import com.ubirch.niomon.cache.RedisCache
 import com.ubirch.provider.ConfigProvider
 import com.ubirch.util.{Binder, InjectorHelper, Lifecycle, TestErrorMessages}
@@ -49,7 +49,7 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
 
     val niomonErrorTopic = "ubirch-niomon-error-json"
     val eventlogErrorTopic = "com-ubirch-eventlog-error"
-    val ownerId = "1234567890"
+    val customerId = "1234567890"
     val injector = FakeInjector("localhost:" + kafkaConfig.kafkaPort, niomonErrorTopic, eventlogErrorTopic)
 
     val config = injector.get[Config]
@@ -57,8 +57,8 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
     val lifecycle = injector.get[Lifecycle]
 
     class FakeTR(config: Config, mockRedis: RedisCache) extends TenantRetriever(config, mockRedis) {
-      override def getDevice(hwDeviceId: String, token: String): Option[Device] = {
-        Some(Device("", canBeDeleted = false, "", Seq(), Attributes(Seq(), Seq(), Seq()), "", Seq(Owner(ownerId, "", "", "")), "", ""))
+      override def getDevice(hwDeviceId: String, token: String): Option[SimpleDeviceInfo] = {
+        Some(SimpleDeviceInfo("", "", customerId))
       }
     }
     val fakeTenantRetriever = new FakeTR(config, mockRedis)
@@ -94,7 +94,6 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
       publishToKafka(eventlogRecord1)
       publishToKafka(eventlogRecord2)
 
-      //      createCustomTopic("incident_" + ownerId)
       mockIncidentHandler.consumption.startPolling()
       Thread.sleep(6000)
       var niomonCounter = 0
@@ -119,22 +118,6 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
       eventlogCounter mustBe 2
       niomonCounter mustBe 2
 
-
-      //      consumeNumberMessagesFrom[Array[Byte]]("incident_" + ownerId, 4).foreach { cr: Array[Byte] =>
-      //        val incident: Incident = read[Incident](new ByteArrayInputStream(cr))
-      //        incident.microservice match {
-      //          case "niomon-decoder" =>
-      //            assert(Seq("NoSuchElementException: Header with key x-ubirch-hardware-id is missing. Cannot verify msgpack.", "SignatureException: Invalid signature").contains(incident.error))
-      //            assert(Seq("7820bb50-a2f4-4c42-9b80-5d918bff7ff2", "7c9743e7-fa43-4790-996d-59d9ee06f2a6").contains(incident.requestId))
-      //            assert(incident.timestamp.before(new Date()))
-      //            niomonCounter += 1
-      //          case service if service == "event-log-service" || service == "event-log" =>
-      //            assert(Seq("Error in the Encoding Process: No CustomerId found", "Error storing data (other)").contains(incident.error))
-      //            incident.requestId mustBe "request_Id_unknown"
-      //            assert(Seq(new DateTime("2020-12-01T08:52:09.484Z"), new DateTime("2020-12-01T12:37:59.892Z")).contains(new DateTime(incident.timestamp)))
-      //            eventlogCounter += 1
-      //        }
-      //      }
     }
   }
 

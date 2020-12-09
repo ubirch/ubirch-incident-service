@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import com.ubirch.kafka.consumer.WithConsumerShutdownHook
 import com.ubirch.kafka.express.ExpressKafka
 import com.ubirch.kafka.producer.WithProducerShutdownHook
-import com.ubirch.models.{Device, EventlogError, Incident, NiomonError}
+import com.ubirch.models.{EventlogError, Incident, NiomonError, SimpleDeviceInfo}
 import com.ubirch.util.Lifecycle
 import com.ubirch.values.ConfPaths.{IncidentConsumerConf, IncidentProducerConf}
 import com.ubirch.values.HeaderKeys
@@ -86,16 +86,10 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
         val incident: Incident = createIncidentFromCR(cr, hwId)
         tenantRetriever.getDevice(hwId, authToken) match {
 
-          case Some(device: Device) =>
+          case Some(device: SimpleDeviceInfo) =>
+            logger.info(s"processing incident $incident for owner ${device.customerId} and forwarding it to mqtt")
+            distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), device.customerId)
 
-            device.owners.headOption match {
-              case Some(owner) =>
-                logger.info(s"processing incident $incident for owner $owner and forwarding it to mqtt")
-                distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), owner.id)
-
-              case None =>
-                throw new IllegalArgumentException(s"device is missing an owner $device")
-            }
           //          send(publishTopicPrefix + ownerId, write(incident).getBytes(StandardCharsets.UTF_8))
 
           case None =>

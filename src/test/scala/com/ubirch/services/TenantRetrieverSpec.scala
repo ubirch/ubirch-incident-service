@@ -2,7 +2,7 @@ package com.ubirch.services
 
 import com.github.sebruck.EmbeddedRedis
 import com.ubirch.TestBase
-import com.ubirch.models.Device
+import com.ubirch.models.SimpleDeviceInfo
 import com.ubirch.util.{Binder, InjectorHelper}
 import org.json4s.native.Serialization.read
 import org.json4s.{DefaultFormats, Formats}
@@ -13,7 +13,7 @@ class TenantRetrieverSpec extends TestBase with EmbeddedRedis {
 
   private val injector = new InjectorHelper(Binder.modules) {}
   var redis: Option[RedisServer] = None
-  private val deviceJson: String = getDeviceJson
+  private val deviceJson: String = getSimpleDeviceInfoJson
   implicit val json4sJacksonFormats: Formats = DefaultFormats.lossless
 
   override def beforeAll(): Unit = {
@@ -32,7 +32,7 @@ class TenantRetrieverSpec extends TestBase with EmbeddedRedis {
     val spiedTenantRetriever = Mockito.spy(tenantRetriever)
     val response: Either[Throwable, String] = Right(deviceJson)
     Mockito.doAnswer(_ => response).when(spiedTenantRetriever).getDeviceFromThingApi(hwId, token)
-    val shouldDevice = Some(read[Device](deviceJson))
+    val shouldDevice = Some(read[SimpleDeviceInfo](deviceJson))
 
     //device should be retrieved via Thing API call
     val isDevice = spiedTenantRetriever.getDevice(hwId, token)
@@ -48,39 +48,11 @@ class TenantRetrieverSpec extends TestBase with EmbeddedRedis {
     cachedDevice mustBe shouldDevice
   }
 
-  private def getDeviceJson: String =
+  private def getSimpleDeviceInfoJson: String =
     """{
+      |  "hwDeviceId": "string",
       |  "description": "string",
-      |  "canBeDeleted": true,
-      |  "deviceType": "string",
-      |  "groups": [
-      |    {
-      |      "id": "string",
-      |      "name": "string"
-      |    }
-      |  ],
-      |  "attributes": {
-      |    "additionalProp1": [
-      |      "string"
-      |    ],
-      |    "additionalProp2": [
-      |      "string"
-      |    ],
-      |    "additionalProp3": [
-      |      "string"
-      |    ]
-      |  },
-      |  "id": "string",
-      |  "owner": [
-      |    {
-      |      "id": "string",
-      |      "username": "string",
-      |      "lastname": "string",
-      |      "firstname": "string"
-      |    }
-      |  ],
-      |  "created": "string",
-      |  "hwDeviceId": "string"
+      |  "customerId": "string"
       |}""".stripMargin
 
 }
