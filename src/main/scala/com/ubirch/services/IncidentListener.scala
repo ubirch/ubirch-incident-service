@@ -82,10 +82,9 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
       try {
         val hwId = retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
         val authToken = retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
-        val xsrfToken = retrieveHeader(cr, HeaderKeys.X_XSRF_TOKEN)
 
         val incident: Incident = createIncidentFromCR(cr, hwId)
-        tenantRetriever.getDevice(hwId, xsrfToken) match {
+        tenantRetriever.getDevice(hwId, authToken) match {
 
           case Some(device: Device) =>
 

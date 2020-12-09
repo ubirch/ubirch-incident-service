@@ -65,7 +65,7 @@ class TenantRetriever @Inject()(config: Config, redis: RedisCache) extends Stric
 
   private[services] def getDeviceFromThingApi(hwId: String, token: String): Either[Throwable, String] = {
     for {
-      uri <- Uri.parse(thingApiURL + hwId).toEither
+      uri <- Uri.parse(thingApiURL).toEither
       response = sttp.get(uri).header("Authorization", s"bearer $token").send()
       body <- response.body.left.map(_ => new NoSuchElementException("No device info"))
     } yield {
