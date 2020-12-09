@@ -79,7 +79,7 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
 
     consumerRecords.map { cr =>
 
-      Future {
+      try {
         val hwId = retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
         val authToken = retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
 
@@ -101,10 +101,10 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
           case None =>
             throw new IOException(s"thing api cannot find a device for deviceId $hwId with $authToken")
         }
-      }.recover {
+      } catch {
         case ex: Throwable =>
           logger.error(s"processing incident from consumerRecord with key ${cr.key()} from topic ${cr.topic()} failed ", ex)
-          false
+          Future.successful(false)
       }
     }
   }

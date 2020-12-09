@@ -25,6 +25,7 @@ import org.scalatest.mockito.MockitoSugar.mock
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.util.Date
+import scala.concurrent.Future
 
 class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLogging {
 
@@ -62,15 +63,15 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
     }
     val fakeTenantRetriever = new FakeTR(config, mockRedis)
 
-    class FakeDistributor(config: Config) extends DistributorBase {
+    class FakeDistributor extends DistributorBase {
       var incidentList: Seq[Array[Byte]] = Seq()
 
-      override def sendIncident(incident: Array[Byte], customerId: String): Boolean = {
+      override def sendIncident(incident: Array[Byte], customerId: String): Future[Boolean] = {
         incidentList = incidentList :+ incident
-        true
+        Future.successful(true)
       }
     }
-    val distributor = new FakeDistributor(config)
+    val distributor = new FakeDistributor
     val mockIncidentHandler = new IncidentListener(config, lifecycle, fakeTenantRetriever, distributor)
 
     withRunningKafka {
@@ -118,7 +119,7 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
       eventlogCounter mustBe 2
       niomonCounter mustBe 2
 
-      //      Thread.sleep(3000)
+
       //      consumeNumberMessagesFrom[Array[Byte]]("incident_" + ownerId, 4).foreach { cr: Array[Byte] =>
       //        val incident: Incident = read[Incident](new ByteArrayInputStream(cr))
       //        incident.microservice match {
