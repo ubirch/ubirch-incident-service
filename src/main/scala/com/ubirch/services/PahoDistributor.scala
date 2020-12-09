@@ -7,7 +7,6 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.eclipse.paho.client.mqttv3.{MqttClient, MqttConnectOptions, MqttException, MqttMessage}
 
 import javax.inject.Inject
-import scala.concurrent.Future
 
 class PahoDistributor @Inject()(config: Config) extends DistributorBase with StrictLogging {
 
@@ -28,9 +27,8 @@ class PahoDistributor @Inject()(config: Config) extends DistributorBase with Str
       connOpts.setUserName(userName)
       connOpts.setPassword(password.toCharArray)
       connOpts.setCleanSession(true)
-      logger.info("MQTT Client connecting to broker: " + broker)
       client.connect(connOpts)
-      logger.info("MQTT Client connected.")
+      logger.info("MQTT Client connected to broker: " + broker)
       client
     } catch {
       case me: MqttException =>
@@ -39,17 +37,16 @@ class PahoDistributor @Inject()(config: Config) extends DistributorBase with Str
     }
   }
 
-  override def sendIncident(incident: Array[Byte], customerId: String): Future[Boolean] = {
+  override def sendIncident(incident: Array[Byte], customerId: String): Boolean = {
     try {
-      val topic = queue_prefix + customerId
       val message = new MqttMessage(incident)
       message.setQos(qos)
-      sampleClient.publish(topic, message)
-      Future.successful(true)
+      sampleClient.publish(queue_prefix + customerId, message)
+      true
     } catch {
       case ex: Throwable =>
         logger.error(s"failing to send mqtt message for customerId $customerId: ", ex)
-        Future.successful(false)
+        false
     }
   }
 }

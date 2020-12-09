@@ -79,28 +79,45 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
 
     consumerRecords.map { cr =>
 
-      val hwId = retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
-      val authToken = retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
+      Future {
+        val hwId = retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
+        val authToken = retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
 
-      val incident: Incident = cr.topic match {
-        case `niomonErrorTopic` =>
-          val nError = read[NiomonError](new ByteArrayInputStream(cr.value()))
-          Incident(nError.requestId, hwId, nError.error, nError.microservice, new Date())
+        val incident: Incident = createIncidentFromCR(cr, hwId)
 
-        case `eventlogErrorTopic` =>
-          val eError = read[EventlogError](new ByteArrayInputStream(cr.value()))
-          Incident("request_Id_unknown", hwId, eError.event.message, eError.event.service_name, eError.event.error_time)
-      }
+        tenantRetriever.getDevice(hwId, authToken) match {
 
-      tenantRetriever.getDevice(hwId, authToken) match {
-        case Some(device: Device) =>
-          val ownerId: String = device.owners.head.id
+          case Some(device: Device) =>
+
+            device.owners.headOption match {
+              case Some(owner) =>
+                distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), owner.id)
+
+              case None =>
+                throw new IllegalArgumentException(s"device is missing an owner $device")
+            }
           //          send(publishTopicPrefix + ownerId, write(incident).getBytes(StandardCharsets.UTF_8))
-          distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), ownerId)
 
-        case None =>
-          throw new IOException("deviceId unknown")
+          case None =>
+            throw new IOException(s"thing api cannot find a device for deviceId $hwId with $authToken")
+        }
+      }.recover {
+        case ex: Throwable =>
+          logger.error(s"processing incident from consumerRecord with key ${cr.key()} from topic ${cr.topic()} failed ", ex)
+          false
       }
+    }
+  }
+
+  private def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String) = {
+    cr.topic match {
+      case `niomonErrorTopic` =>
+        val nError = read[NiomonError](new ByteArrayInputStream(cr.value()))
+        Incident(nError.requestId, hwId, nError.error, nError.microservice, new Date())
+
+      case `eventlogErrorTopic` =>
+        val eError = read[EventlogError](new ByteArrayInputStream(cr.value()))
+        Incident("request_Id_unknown", hwId, eError.event.message, eError.event.service_name, eError.event.error_time)
     }
   }
 
