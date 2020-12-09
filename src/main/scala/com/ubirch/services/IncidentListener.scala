@@ -84,13 +84,13 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
         val authToken = retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
 
         val incident: Incident = createIncidentFromCR(cr, hwId)
-
         tenantRetriever.getDevice(hwId, authToken) match {
 
           case Some(device: Device) =>
 
             device.owners.headOption match {
               case Some(owner) =>
+                logger.info(s"processing incident $incident for owner $owner and forwarding it to mqtt")
                 distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), owner.id)
 
               case None =>
