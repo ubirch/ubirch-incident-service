@@ -25,7 +25,6 @@ import org.scalatest.mockito.MockitoSugar.mock
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.util.Date
-import scala.concurrent.Future
 
 class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLogging {
 
@@ -66,9 +65,9 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
     class FakeDistributor(config: Config) extends DistributorBase {
       var incidentList: Seq[Array[Byte]] = Seq()
 
-      override def sendIncident(incident: Array[Byte], customerId: String): Future[Boolean] = {
+      override def sendIncident(incident: Array[Byte], customerId: String): Boolean = {
         incidentList = incidentList :+ incident
-        Future.successful(true)
+        true
       }
     }
     val distributor = new FakeDistributor(config)
