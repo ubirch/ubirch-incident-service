@@ -7,8 +7,6 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.eclipse.paho.client.mqttv3.{MqttClient, MqttConnectOptions, MqttException, MqttMessage}
 
 import javax.inject.Inject
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 
 class PahoDistributor @Inject()(config: Config) extends DistributorBase with StrictLogging {
 
@@ -39,16 +37,10 @@ class PahoDistributor @Inject()(config: Config) extends DistributorBase with Str
     }
   }
 
-  override def sendIncident(incident: Array[Byte], customerId: String): Future[Boolean] = {
-    Future {
-      val message = new MqttMessage(incident)
-      message.setQos(qos)
-      sampleClient.publish(queue_prefix + customerId, message)
-      true
-    }.recover {
-      case ex: Throwable =>
-        logger.error(s"failing to send mqtt message for customerId $customerId: ", ex)
-        false
-    }
+  override def sendIncident(incident: Array[Byte], customerId: String): Boolean = {
+    val message = new MqttMessage(incident)
+    message.setQos(qos)
+    sampleClient.publish(queue_prefix + customerId, message)
+    true
   }
 }

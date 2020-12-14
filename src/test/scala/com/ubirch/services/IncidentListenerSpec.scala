@@ -57,18 +57,18 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
     val lifecycle = injector.get[Lifecycle]
 
     class FakeTR(config: Config, mockRedis: RedisCache) extends TenantRetriever(config, mockRedis) {
-      override def getDevice(hwDeviceId: String, token: String): Option[SimpleDeviceInfo] = {
-        Some(SimpleDeviceInfo("", "", customerId))
+      override def getDevice(hwDeviceId: String, token: String): Future[Option[SimpleDeviceInfo]] = {
+        Future.successful(Some(SimpleDeviceInfo("", "", customerId)))
       }
     }
     val fakeTenantRetriever = new FakeTR(config, mockRedis)
+    var incidentList: Seq[Array[Byte]] = Seq()
 
     class FakeDistributor extends DistributorBase {
-      var incidentList: Seq[Array[Byte]] = Seq()
 
-      override def sendIncident(incident: Array[Byte], customerId: String): Future[Boolean] = {
-        incidentList = incidentList :+ incident
-        Future.successful(true)
+      override def sendIncident(incident: Array[Byte], customerId: String): Boolean = {
+        synchronized(incidentList = incidentList :+ incident)
+        true
       }
     }
     val distributor = new FakeDistributor
@@ -99,8 +99,8 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
       var niomonCounter = 0
       var eventlogCounter = 0
 
-      distributor.incidentList.length mustBe 4
-      distributor.incidentList.foreach { byteArray: Array[Byte] =>
+      incidentList.length mustBe 4
+      incidentList.foreach { byteArray: Array[Byte] =>
         val incident: Incident = read[Incident](new ByteArrayInputStream(byteArray))
         incident.microservice match {
           case "niomon-decoder" =>

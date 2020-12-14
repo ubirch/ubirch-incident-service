@@ -15,7 +15,7 @@ import org.json4s.ext.{JavaTypesSerializers, JodaTimeSerializers}
 import org.json4s.jackson.Serialization.{read, write}
 import org.json4s.{DefaultFormats, Formats}
 
-import java.io.{ByteArrayInputStream, IOException}
+import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.util.Date
 import javax.inject.Inject
@@ -25,7 +25,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRetriever: TenantRetriever,
                                  distributor: DistributorBase)
                                 (implicit val ec: ExecutionContext)
-  extends ExpressKafka[String, Array[Byte], Unit]
+  extends ExpressKafka[String, Array[Byte], Vector[Boolean]]
     with WithConsumerShutdownHook
     with WithProducerShutdownHook
     with LazyLogging {
@@ -69,51 +69,53 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
 
   override def valueSerializer: Serializer[Array[Byte]] = new ByteArraySerializer
 
-  //  private val publishTopicPrefix: String = config.getString(IncidentProducerConf.PUBLISH_TOPIC_PREFIX)
-
   lifecycle.addStopHooks(hookFunc(consumerGracefulTimeout, consumption), hookFunc(production))
 
-  override val process: Process = Process.apply(processing)
+  override val process: Process = Process.async(processing)
 
-  def processing(consumerRecords: Vector[ConsumerRecord[String, Array[Byte]]]): Vector[Future[Boolean]] = {
+  def processing(consumerRecords: Vector[ConsumerRecord[String, Array[Byte]]]): Future[Vector[Boolean]] = {
 
-    consumerRecords.map { cr =>
+    Future.sequence(consumerRecords.map { cr =>
 
       try {
         val hwId = retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
         val authToken = retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
+        val incident = createIncidentFromCR(cr, hwId)
 
-        val incident: Incident = createIncidentFromCR(cr, hwId)
-        tenantRetriever.getDevice(hwId, authToken) match {
+        tenantRetriever.getDevice(hwId, authToken).map {
 
           case Some(device: SimpleDeviceInfo) =>
             logger.info(s"processing incident $incident for owner ${device.customerId} and forwarding it to mqtt")
             distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), device.customerId)
-
-          //          send(publishTopicPrefix + ownerId, write(incident).getBytes(StandardCharsets.UTF_8))
-
-          case None =>
-            throw new IOException(s"thing api cannot find a device for deviceId $hwId with $authToken")
         }
       } catch {
         case ex: Throwable =>
           logger.error(s"processing incident from consumerRecord with key ${cr.key()} from topic ${cr.topic()} failed ", ex)
           Future.successful(false)
       }
-    }
+    })
   }
 
-  private def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String) = {
-    cr.topic match {
-      case `niomonErrorTopic` =>
-        val nError = read[NiomonError](new ByteArrayInputStream(cr.value()))
-        Incident(nError.requestId, hwId, nError.error, nError.microservice, new Date())
+  private def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String): Incident =
+    try {
+      cr.topic match {
+        case `niomonErrorTopic` =>
+          val nError = read[NiomonError](new ByteArrayInputStream(cr.value()))
+          Incident(nError.requestId, hwId, nError.error, nError.microservice, new Date())
 
-      case `eventlogErrorTopic` =>
-        val eError = read[EventlogError](new ByteArrayInputStream(cr.value()))
-        Incident("request_Id_unknown", hwId, eError.event.message, eError.event.service_name, eError.event.error_time)
+        case `eventlogErrorTopic` =>
+          val eError = read[EventlogError](new ByteArrayInputStream(cr.value()))
+          Incident("request_Id_unknown", hwId, eError.event.message, eError.event.service_name, eError.event.error_time)
+
+        case _ =>
+          throw new IllegalArgumentException(s"found unknown topic: ${cr.topic()} in incident handler")
+      }
+    } catch {
+      case ex: Throwable =>
+        logger.error("couldn't parse error from consumerRecord", ex)
+        throw ex
     }
-  }
+
 
   private def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): String = {
     val values = cr.headers().headers(headerKey).toSet

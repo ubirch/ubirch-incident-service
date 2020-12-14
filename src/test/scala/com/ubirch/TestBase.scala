@@ -1,7 +1,7 @@
 package com.ubirch
 
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpec}
+import org.scalatest.{AsyncWordSpec, BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers}
 
 import java.util.concurrent.Executors
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
@@ -11,7 +11,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
   * Represents base for a convenient test
   */
 trait TestBase
-  extends WordSpec
+  extends AsyncWordSpec
     with ScalaFutures
     with BeforeAndAfterEach
     with BeforeAndAfterAll

@@ -13,6 +13,8 @@ import org.redisson.api.RMapCache
 
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 
 class TenantRetriever @Inject()(config: Config, redis: RedisCache) extends StrictLogging {
@@ -22,54 +24,53 @@ class TenantRetriever @Inject()(config: Config, redis: RedisCache) extends Stric
   private val thingApiURL = config.getString(TenantRetrieverConf.THING_API_URL)
   implicit val json4sJacksonFormats: Formats = DefaultFormats.lossless ++ JavaTypesSerializers.all ++ JodaTimeSerializers.all
   private val ttlMinutesRedisDeviceMap: Long = config.getLong(TenantRetrieverConf.TTL_REDIS_DEVICE_MAP)
+  private val uri: Uri = Uri.parse(thingApiURL).getOrElse(throw new IllegalArgumentException(s"the configuration for the thingApiURL $thingApiURL is not parsable to uri."))
 
-  def getDevice(hwId: String, token: String): Option[SimpleDeviceInfo] = {
-    getDeviceCached(hwId) match {
-
+  def getDevice(hwId: String, token: String): Future[Option[SimpleDeviceInfo]] =
+    getDeviceCached(hwId).map {
       case None =>
         getDeviceFromThingApi(hwId, token) match {
-          case Left(ex) => throw ex
+          case Left(msg) =>
+            logger.error(s"failed to retrieve simpleDeviceInfo from Thing Api $msg")
+            None
           case Right(deviceJson) =>
             cacheDevice(hwId, deviceJson)
             Some(read[SimpleDeviceInfo](deviceJson))
         }
       case deviceOpt =>
         deviceOpt
+    }.recover {
+      case ex: Throwable =>
+        logger.error("something went wrong retrieving device ", ex)
+        None
     }
-  }
+
 
   private[services] def updateTTL(hwId: String, deviceJson: String) = {
     redisMap.fastPutAsync(hwId, deviceJson, ttlMinutesRedisDeviceMap, TimeUnit.MINUTES)
   }
 
 
-  private[services] def getDeviceCached(hwId: String): Option[SimpleDeviceInfo] = {
+  private[services] def getDeviceCached(hwId: String): Future[Option[SimpleDeviceInfo]] =
 
-    redisMap.get(hwId) match {
+    Future(redisMap.get(hwId)).map {
       case deviceJson: String =>
-        try {
-          //Todo: Does this make sense?
-          updateTTL(hwId, deviceJson)
-          Some(read[SimpleDeviceInfo](deviceJson))
-        } catch {
-          case ex: Throwable => logger.error("something went wrong parsing a device from redis cache", ex)
-            None
-        }
+        //Todo: Does this make sense?
+        updateTTL(hwId, deviceJson)
+        Some(read[SimpleDeviceInfo](deviceJson))
       case _ => None
+    }.recover {
+      case ex: Throwable =>
+        logger.error(s"something went wrong retrieving device with hwId $hwId from cache. ", ex)
+        None
     }
-  }
 
-  private def cacheDevice(hwId: String, deviceJson: String): Unit = {
+
+  private[services] def cacheDevice(hwId: String, deviceJson: String): Unit =
     redisMap.fastPutAsync(hwId, deviceJson, ttlMinutesRedisDeviceMap, TimeUnit.MINUTES)
-  }
 
-  private[services] def getDeviceFromThingApi(hwId: String, token: String): Either[Throwable, String] = {
-    for {
-      uri <- Uri.parse(thingApiURL).toEither
-      response = sttp.get(uri).header("Authorization", s"bearer $token").send()
-      body <- response.body.left.map(_ => new NoSuchElementException("No device info"))
-    } yield {
-      body
-    }
-  }
+
+  private[services] def getDeviceFromThingApi(hwId: String, token: String): Either[String, String] =
+    sttp.get(uri).header("Authorization", s"bearer $token").send().body
+
 }
