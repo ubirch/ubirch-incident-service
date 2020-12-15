@@ -4,9 +4,9 @@ import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
 import com.ubirch.values.ConfPaths.MqttDistributorConf
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
-import org.eclipse.paho.client.mqttv3.{MqttClient, MqttConnectOptions, MqttException, MqttMessage}
+import org.eclipse.paho.client.mqttv3.{MqttAsyncClient, MqttConnectOptions, MqttException, MqttMessage}
 
-import javax.inject.Inject
+import javax.inject.{Inject, Singleton}
 
 class PahoDistributor @Inject()(config: Config) extends DistributorBase with StrictLogging {
 
@@ -17,12 +17,13 @@ class PahoDistributor @Inject()(config: Config) extends DistributorBase with Str
   private val password = config.getString(MqttDistributorConf.PASSWORD)
   private val queue_prefix = config.getString(MqttDistributorConf.QUEUE_PREFIX)
 
-  private val sampleClient: MqttClient = getClient
+  @Singleton
+  private val sampleClient: MqttAsyncClient = getClient
 
-  def getClient: MqttClient = {
+  def getClient: MqttAsyncClient = {
     try {
       val persistence = new MemoryPersistence()
-      val client = new MqttClient(broker, clientId, persistence)
+      val client = new MqttAsyncClient(broker, clientId, persistence)
       val connOpts = new MqttConnectOptions()
       connOpts.setUserName(userName)
       connOpts.setPassword(password.toCharArray)
