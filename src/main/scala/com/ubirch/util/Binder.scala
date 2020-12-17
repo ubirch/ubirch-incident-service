@@ -4,8 +4,9 @@ import com.google.inject.binder.ScopedBindingBuilder
 import com.google.inject.{AbstractModule, Module}
 import com.typesafe.config.Config
 import com.ubirch.niomon.cache.RedisCache
-import com.ubirch.provider.{ConfigProvider, ExecutionProvider, RedisProvider}
+import com.ubirch.provider.{ConfigProvider, ExecutionProvider, MQTTClientProvider, RedisProvider}
 import com.ubirch.services.{DistributorBase, PahoDistributor}
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient
 
 import scala.concurrent.ExecutionContext
 
@@ -21,6 +22,8 @@ class Binder extends AbstractModule {
 
   def redis: ScopedBindingBuilder = bind(classOf[RedisCache]).toProvider(classOf[RedisProvider])
 
+  def mqttClient: ScopedBindingBuilder = bind(classOf[MqttAsyncClient]).toProvider(classOf[MQTTClientProvider])
+
   def distributor: ScopedBindingBuilder = bind(classOf[DistributorBase]).to(classOf[PahoDistributor])
 
   def configure(): Unit = {
@@ -29,6 +32,7 @@ class Binder extends AbstractModule {
     jvmHook
     lifecycle
     redis
+    mqttClient
     distributor
   }
 

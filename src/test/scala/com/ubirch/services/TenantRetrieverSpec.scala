@@ -32,7 +32,7 @@ class TenantRetrieverSpec extends TestBase with EmbeddedRedis {
     val spiedTenantRetriever = Mockito.spy(tenantRetriever)
 
     Mockito
-      .doAnswer(_ => Right(deviceJson).asInstanceOf[Either[Throwable, String]])
+      .doAnswer(_ => Right(deviceJson).asInstanceOf[Either[String, String]])
       .when(spiedTenantRetriever).getDeviceFromThingApi(hwId, token)
 
     val shouldDevice = Some(read[SimpleDeviceInfo](deviceJson))

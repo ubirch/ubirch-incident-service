@@ -58,7 +58,7 @@ class TenantRetriever @Inject()(config: Config, redis: RedisCache) extends Stric
         //Todo: Does this make sense?
         updateTTL(hwId, deviceJson)
         Some(read[SimpleDeviceInfo](deviceJson))
-      case _ => None
+      case null => None
     }.recover {
       case ex: Throwable =>
         logger.error(s"something went wrong retrieving device with hwId $hwId from cache. ", ex)
