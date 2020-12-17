@@ -3,10 +3,10 @@ package com.ubirch.util
 import com.google.inject.binder.ScopedBindingBuilder
 import com.google.inject.{AbstractModule, Module}
 import com.typesafe.config.Config
-import com.ubirch.niomon.cache.RedisCache
 import com.ubirch.provider.{ConfigProvider, ExecutionProvider, MQTTClientProvider, RedisProvider}
 import com.ubirch.services.{DistributorBase, PahoDistributor}
 import org.eclipse.paho.client.mqttv3.MqttAsyncClient
+import scredis.Redis
 
 import scala.concurrent.ExecutionContext
 
@@ -20,7 +20,7 @@ class Binder extends AbstractModule {
 
   def lifecycle: ScopedBindingBuilder = bind(classOf[Lifecycle]).to(classOf[DefaultLifecycle])
 
-  def redis: ScopedBindingBuilder = bind(classOf[RedisCache]).toProvider(classOf[RedisProvider])
+  def redis: ScopedBindingBuilder = bind(classOf[Redis]).toProvider(classOf[RedisProvider])
 
   def mqttClient: ScopedBindingBuilder = bind(classOf[MqttAsyncClient]).toProvider(classOf[MQTTClientProvider])
 

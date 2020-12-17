@@ -2,18 +2,14 @@ package com.ubirch.provider
 
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
-import com.ubirch.niomon.cache.RedisCache
-import com.ubirch.values.ConfPaths.ServiceConf
+import scredis.Redis
 
-import javax.inject._
+import javax.inject.{Inject, Provider, Singleton}
 
 @Singleton
-class RedisProvider @Inject()(config: Config) extends Provider[RedisCache] with StrictLogging {
+class RedisProvider @Inject()(config: Config) extends Provider[Redis] with StrictLogging {
 
-  private val redisName = config.getString(ServiceConf.SERVICE_NAME)
-  private val redis: RedisCache = new RedisCache(redisName, config)
+  private val redis: Redis = Redis(config)
 
-  override def get(): RedisCache = redis
-
+  override def get(): Redis = redis
 }
-

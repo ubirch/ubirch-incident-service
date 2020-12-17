@@ -38,22 +38,24 @@ class TenantRetrieverSpec extends TestBase with EmbeddedRedis {
     val shouldDevice = Some(read[SimpleDeviceInfo](deviceJson))
 
     //device should be retrieved via Thing API call
-    val isDevice = spiedTenantRetriever.getDevice(hwId, token)
-    isDevice.map { device =>
-      tenantRetriever.cacheDevice(hwId, deviceJson)
-      device mustBe shouldDevice
+    spiedTenantRetriever
+      .getDevice(hwId, token)
+      .map { device =>
+        tenantRetriever.cacheDevice(hwId, deviceJson)
+        device mustBe shouldDevice
 
-      //the device should be stored in cache
-      val deviceOpt = tenantRetriever.getDeviceCached(hwId)
-      deviceOpt.flatMap { d =>
-        d mustBe shouldDevice
+        //the device should be stored in cache
+        tenantRetriever
+          .getDeviceCached(hwId)
+          .flatMap { d =>
+            d mustBe shouldDevice
 
-        //now the Thing API call should not be made
-        Mockito.doAnswer(_ => throw new IllegalArgumentException("should not be thrown")).when(spiedTenantRetriever).getDeviceFromThingApi(hwId, token)
-        val cachedDevice = spiedTenantRetriever.getDevice(hwId, token)
-        cachedDevice.flatMap(_ mustBe shouldDevice)
-      }
-    }.flatten
+            //now the Thing API call should not be made
+            Mockito.doAnswer(_ => throw new IllegalArgumentException("should not be thrown")).when(spiedTenantRetriever).getDeviceFromThingApi(hwId, token)
+            val cachedDevice = spiedTenantRetriever.getDevice(hwId, token)
+            cachedDevice.flatMap(_ mustBe shouldDevice)
+          }
+      }.flatten
   }
 
   private def getSimpleDeviceInfoJson: String =

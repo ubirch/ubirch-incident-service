@@ -6,7 +6,6 @@ import com.typesafe.scalalogging.StrictLogging
 import com.ubirch.TestBase
 import com.ubirch.kafka.util.PortGiver
 import com.ubirch.models.{Incident, SimpleDeviceInfo}
-import com.ubirch.niomon.cache.RedisCache
 import com.ubirch.provider.ConfigProvider
 import com.ubirch.util.{Binder, InjectorHelper, Lifecycle, TestErrorMessages}
 import com.ubirch.values.ConfPaths.{IncidentConsumerConf, IncidentProducerConf}
@@ -21,6 +20,7 @@ import org.json4s.ext.{JavaTypesSerializers, JodaTimeSerializers}
 import org.json4s.jackson.Serialization.read
 import org.json4s.{DefaultFormats, Formats}
 import org.scalatest.mockito.MockitoSugar.mock
+import scredis.Redis
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
@@ -53,15 +53,15 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
     val injector = FakeInjector("localhost:" + kafkaConfig.kafkaPort, niomonErrorTopic, eventlogErrorTopic)
 
     val config = injector.get[Config]
-    val mockRedis = mock[RedisCache]
+    val mockRedis = mock[Redis]
     val lifecycle = injector.get[Lifecycle]
 
-    class FakeTR(config: Config, mockRedis: RedisCache) extends TenantRetriever(config, mockRedis) {
+    class FakeTR(config: Config, mockRedis: Redis, lifecycle: Lifecycle) extends TenantRetriever(config, mockRedis, lifecycle) {
       override def getDevice(hwDeviceId: String, token: String): Future[Option[SimpleDeviceInfo]] = {
         Future.successful(Some(SimpleDeviceInfo("", "", customerId)))
       }
     }
-    val fakeTenantRetriever = new FakeTR(config, mockRedis)
+    val fakeTenantRetriever = new FakeTR(config, mockRedis, lifecycle)
     var incidentList: Seq[Array[Byte]] = Seq()
 
     class FakeDistributor extends DistributorBase {
