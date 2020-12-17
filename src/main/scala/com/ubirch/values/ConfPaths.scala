@@ -39,6 +39,13 @@ object ConfPaths {
     final val THREAD_POOL_SIZE = "incidentService.threadPoolSize"
   }
 
+  trait RedisConf {
+    final val HOST = "redis.host"
+    final val PORT = "redis.port"
+    final val PASSWORD = "redis.password"
+    final val DATABASE = "redis.database"
+  }
+
   trait PrometheusConf {
     final val PORT = "incidentService.metrics.prometheus.port"
   }
@@ -59,6 +66,8 @@ object ConfPaths {
   object TenantRetrieverConf extends TenantRetrieverConf
 
   object ServiceConf extends ServiceConf
+
+  object RedisConf extends RedisConf
 
   object PrometheusConf extends PrometheusConf
 
