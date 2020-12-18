@@ -29,7 +29,7 @@ class MQTTClientProvider @Inject()(lifeCycle: Lifecycle, config: Config) extends
       connOpts.setPassword(password.toCharArray)
       connOpts.setCleanSession(true)
       client.connect(connOpts)
-      logger.info("MQTT Client connected to broker: " + broker)
+      logger.info(s"MQTT Client connected to broker: $broker with $clientId")
       client
     } catch {
       case me: MqttException =>
