@@ -13,12 +13,12 @@ import javax.inject.{Inject, Provider, Singleton}
 @Singleton
 class MQTTClientProvider @Inject()(lifeCycle: Lifecycle, config: Config) extends Provider[MqttAsyncClient] with StrictLogging {
 
-  private val mqttClient: MqttAsyncClient = getClient
   private val broker = config.getString(MqttDistributorConf.BROKER_URL)
   //It can only connect one client with a specific name to a mqtt broker
   private val clientId = config.getString(MqttDistributorConf.CLIENT_ID) + UUID.randomUUID().toString
   private val userName = config.getString(MqttDistributorConf.USER_NAME)
   private val password = config.getString(MqttDistributorConf.PASSWORD)
+  private val mqttClient: MqttAsyncClient = getClient
 
   def getClient: MqttAsyncClient = {
     try {
