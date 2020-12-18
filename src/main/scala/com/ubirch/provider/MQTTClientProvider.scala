@@ -7,6 +7,7 @@ import com.ubirch.values.ConfPaths.MqttDistributorConf
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.eclipse.paho.client.mqttv3.{MqttAsyncClient, MqttConnectOptions, MqttException}
 
+import java.util.UUID
 import javax.inject.{Inject, Provider, Singleton}
 
 @Singleton
@@ -14,7 +15,8 @@ class MQTTClientProvider @Inject()(lifeCycle: Lifecycle, config: Config) extends
 
   private val mqttClient: MqttAsyncClient = getClient
   private val broker = config.getString(MqttDistributorConf.BROKER_URL)
-  private val clientId = config.getString(MqttDistributorConf.CLIENT_ID)
+  //It can only connect one client with a specific name to a mqtt broker
+  private val clientId = config.getString(MqttDistributorConf.CLIENT_ID) + UUID.randomUUID().toString
   private val userName = config.getString(MqttDistributorConf.USER_NAME)
   private val password = config.getString(MqttDistributorConf.PASSWORD)
 
