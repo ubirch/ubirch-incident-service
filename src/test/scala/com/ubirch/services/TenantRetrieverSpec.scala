@@ -9,6 +9,8 @@ import org.json4s.{DefaultFormats, Formats}
 import org.mockito.Mockito
 import redis.embedded.RedisServer
 
+import scala.concurrent.Future
+
 class TenantRetrieverSpec extends TestBase with EmbeddedRedis {
 
   private val injector = new InjectorHelper(Binder.modules) {}
@@ -32,8 +34,9 @@ class TenantRetrieverSpec extends TestBase with EmbeddedRedis {
     val spiedTenantRetriever = Mockito.spy(tenantRetriever)
 
     Mockito
-      .doAnswer(_ => Right(deviceJson).asInstanceOf[Either[String, String]])
-      .when(spiedTenantRetriever).getDeviceFromThingApi(hwId, token)
+      .doAnswer(_ => Future(Right(deviceJson).asInstanceOf[Either[String, String]]))
+      .when(spiedTenantRetriever)
+      .getDeviceFromThingApi(token)
 
     val shouldDevice = Some(read[SimpleDeviceInfo](deviceJson))
 
@@ -51,7 +54,10 @@ class TenantRetrieverSpec extends TestBase with EmbeddedRedis {
             d mustBe shouldDevice
 
             //now the Thing API call should not be made
-            Mockito.doAnswer(_ => throw new IllegalArgumentException("should not be thrown")).when(spiedTenantRetriever).getDeviceFromThingApi(hwId, token)
+            Mockito
+              .doAnswer(_ => throw new IllegalArgumentException("should not be thrown"))
+              .when(spiedTenantRetriever)
+              .getDeviceFromThingApi(token)
             val cachedDevice = spiedTenantRetriever.getDevice(hwId, token)
             cachedDevice.flatMap(_ mustBe shouldDevice)
           }

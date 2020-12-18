@@ -9,6 +9,7 @@ import org.eclipse.paho.client.mqttv3.{MqttAsyncClient, MqttConnectOptions, Mqtt
 
 import java.util.UUID
 import javax.inject.{Inject, Provider, Singleton}
+import scala.concurrent.Future
 
 @Singleton
 class MQTTClientProvider @Inject()(lifeCycle: Lifecycle, config: Config) extends Provider[MqttAsyncClient] with StrictLogging {
@@ -30,7 +31,7 @@ class MQTTClientProvider @Inject()(lifeCycle: Lifecycle, config: Config) extends
       connOpts.setPassword(password.toCharArray)
       connOpts.setCleanSession(true)
       client.connect(connOpts)
-      logger.info(s"MQTT Client connected to broker: $broker with $clientId")
+      logger.info(s"MQTT Client successfully connected.")
       client
     } catch {
       case me: MqttException =>
@@ -41,8 +42,8 @@ class MQTTClientProvider @Inject()(lifeCycle: Lifecycle, config: Config) extends
 
   override def get(): MqttAsyncClient = mqttClient
 
-  //  lifeCycle.addStopHook {
-  //    Future.successful(mqttClient.close())
-  //
-  //  }
+  lifeCycle.addStopHook { () =>
+    mqttClient.disconnect()
+    Future.successful(mqttClient.close())
+  }
 }

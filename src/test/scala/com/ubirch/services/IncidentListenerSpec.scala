@@ -56,12 +56,12 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
     val mockRedis = mock[Redis]
     val lifecycle = injector.get[Lifecycle]
 
-    class FakeTR(config: Config, mockRedis: Redis, lifecycle: Lifecycle) extends TenantRetriever(config, mockRedis, lifecycle) {
+    class FakeTR(config: Config, mockRedis: Redis) extends TenantRetriever(config, mockRedis, lifecycle) {
       override def getDevice(hwDeviceId: String, token: String): Future[Option[SimpleDeviceInfo]] = {
         Future.successful(Some(SimpleDeviceInfo("", "", customerId)))
       }
     }
-    val fakeTenantRetriever = new FakeTR(config, mockRedis, lifecycle)
+    val fakeTenantRetriever = new FakeTR(config, mockRedis)
     var incidentList: Seq[Array[Byte]] = Seq()
 
     class FakeDistributor extends DistributorBase {
