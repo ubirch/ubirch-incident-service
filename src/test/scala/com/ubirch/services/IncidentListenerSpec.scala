@@ -18,6 +18,7 @@ import org.apache.kafka.common.header.internals.{RecordHeader, RecordHeaders}
 import org.apache.kafka.common.record.TimestampType
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer}
 import org.joda.time.DateTime
+import org.joda.time.format.DateTimeFormat
 import org.json4s.JsonAST.{JObject, JString, JValue}
 import org.json4s.ext.{JavaTypesSerializers, JodaTimeSerializers}
 import org.json4s.jackson.Serialization.read
@@ -28,7 +29,10 @@ import scredis.Redis
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
+import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.Date
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 
 class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLogging {
@@ -67,12 +71,12 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
       }
     }
     val fakeTenantRetriever = new FakeTR(config, mockRedis)
-    var incidentList: Seq[Array[Byte]] = Seq()
+    val incidentList: ListBuffer[Array[Byte]] = ListBuffer.empty[Array[Byte]]
 
     class FakeDistributor extends DistributorBase {
 
       override def sendIncident(incident: Array[Byte], customerId: String): Boolean = {
-        synchronized(incidentList = incidentList :+ incident)
+        synchronized(incidentList += incident)
         true
       }
     }
@@ -125,23 +129,29 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
       niomonCounter mustBe 2
     }
   }
-
-
-
 }
 
 class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
   implicit val ec = scala.concurrent.ExecutionContext.global
 
+  val niomonErrorTopic = "ubirch-niomon-error-json"
+  val eventLogErrorTopic = "ubirch-svalbard-evt-error-json"
   private def FakeInjector(bootstrapServers: String, niomonErrorTopic: String, eventlogErrorTopic: String): InjectorHelper =
-    new InjectorHelper(List.empty[Binder]) {}
+    new InjectorHelper(List(new Binder {
+      override def config: ScopedBindingBuilder = bind(classOf[Config]).toProvider(new ConfigProvider {
+        override def conf: Config = super.conf
+          .withValue(IncidentConsumerConf.BOOTSTRAP_SERVERS, ConfigValueFactory.fromAnyRef(bootstrapServers))
+          .withValue(IncidentProducerConf.BOOTSTRAP_SERVERS, ConfigValueFactory.fromAnyRef(bootstrapServers))
+          .withValue(IncidentConsumerConf.EVENTLOG_ERROR_TOPIC, ConfigValueFactory.fromAnyRef(eventlogErrorTopic))
+          .withValue(IncidentConsumerConf.NIOMON_ERROR_TOPIC, ConfigValueFactory.fromAnyRef(niomonErrorTopic))
+      })
+    })) {}
 
   private def getMockInjectListener(): IncidentListener = {
-    val injector = FakeInjector("localhost:" + 8000, "", "")
+    val injector = FakeInjector("localhost:" + 8000, niomonErrorTopic, eventLogErrorTopic)
 
     val config = injector.get[Config]
     val lifecycle = injector.get[Lifecycle]
-    val distributor = new FakeDistributor
     val mockRedis = mock[Redis]
     class FakeTR(config: Config, mockRedis: Redis) extends TenantRetriever(config, mockRedis, lifecycle) {
       override def getDevice(hwDeviceId: String, token: String): Future[Option[SimpleDeviceInfo]] = Future.successful(None)
@@ -150,6 +160,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
     class FakeDistributor extends DistributorBase {
       override def sendIncident(incident: Array[Byte], customerId: String): Boolean = true
     }
+    val distributor = new FakeDistributor
     new IncidentListener(config, lifecycle, fakeTenantRetriever, distributor)
   }
 
@@ -157,10 +168,10 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
     val niomonError = NiomonError("NoSuchElementException: Header with key x-ubirch-hardware-id is missing. Cannot verify msgpack.", Seq("authentication error"), "niomon-decoder", "7c9743e7-fa43-4790-996d-59d9ee06f2a6")
     val niomonErrorJson1: String =
       s"""{
-         |  "error": ${niomonError.error},
-         |  "causes": [${niomonError.causes(0)}],
-         |  "microservice": ${niomonError.microservice},
-         |  "requestId": ${niomonError.requestId}
+         |  "error": "${niomonError.error}",
+         |  "causes": ["${niomonError.causes(0)}"],
+         |  "microservice": "${niomonError.microservice}",
+         |  "requestId": "${niomonError.requestId}"
          |}""".stripMargin
 
     "(success) read NiomonError" in {
@@ -218,7 +229,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val headers = new RecordHeaders()
       val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeader(customerRecord, HeaderKeys.X_UBIRCH_HARDWARE_ID)
-      result mustBe Left(mockIncidentListener.HeaderError(0, HeaderKeys.X_CODE))
+      result mustBe Left(mockIncidentListener.HeaderError(0, HeaderKeys.X_UBIRCH_HARDWARE_ID))
     }
 
     "(failure) multi headers exist " in {
@@ -237,10 +248,10 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val niomonError = NiomonError("NoSuchElementException: Header with key x-ubirch-hardware-id is missing. Cannot verify msgpack.", Seq("authentication error"), "niomon-decoder", "7c9743e7-fa43-4790-996d-59d9ee06f2a6")
       val niomonErrorJson: String =
         s"""{
-           |  "error": ${niomonError.error},
-           |  "causes": [${niomonError.causes(0)}],
-           |  "microservice": ${niomonError.microservice},
-           |  "requestId": ${niomonError.requestId}
+           |  "error": "${niomonError.error}",
+           |  "causes": ["${niomonError.causes(0)}"],
+           |  "microservice": "${niomonError.microservice}",
+           |  "requestId": "${niomonError.requestId}"
            |}""".stripMargin
 
       val errorCode = "errorCode"
@@ -249,7 +260,6 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val xCodeHeader = new RecordHeader(HeaderKeys.X_CODE, errorCode.getBytes)
       val niomonValue = niomonErrorJson.getBytes(StandardCharsets.UTF_8)
       val headers = new RecordHeaders().add(xCodeHeader).add(hwIdHeader)
-      val niomonErrorTopic = "ubirch-niomon-error-json"
       val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord(niomonErrorTopic, 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", niomonValue, headers)
 
       val mockIncidentListener = getMockInjectListener()
@@ -261,34 +271,34 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
         incident.errorCode mustBe Some(errorCode)
         incident.error mustBe niomonError.error
         incident.microservice mustBe niomonError.microservice
-        assert(incident.timestamp.before(new Date()))
       }
     }
 
     "(success) create EventLogError incident" in {
-      val eventLogErrorTopic = "ubirch-svalbard-evt-error-json"
-      val errorDate = new Date()
+      val errorDateStr = "2020-12-01T08:52:09.484Z"
+      val formatter = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+      val errorDate = formatter.parseDateTime(errorDateStr).toDate
       val event = Event("", "Error in the Encoding Process: No CustomerId found", "", JString(""), errorDate, "event-log-service")
       val eventLogError = EventlogError(JObject(List.empty[JField]), "", "", "", "", event, errorDate, "", "", Seq.empty[JValue])
 
       val eventLogErrorJson: String =
         s"""{
           |  "headers": {},
-          |  "id": ${eventLogError.id},
-          |  "customer_id": ${eventLogError.customer_id},
-          |  "service_class":${eventLogError.service_class},
-          |  "category": ${eventLogError.category},
+          |  "id": "${eventLogError.id}",
+          |  "customer_id": "${eventLogError.customer_id}",
+          |  "service_class": "${eventLogError.service_class}",
+          |  "category": "${eventLogError.category}",
           |  "event": {
-          |    "id": ${event.id},
-          |    "message": ${event.message},
-          |    "exception_name": ${event.exception_name},
+          |    "id": "${event.id}",
+          |    "message": "${event.message}",
+          |    "exception_name": "${event.exception_name}",
           |    "value": "",
-          |    "error_time": ${event.error_time},
-          |    "service_name": ${event.service_name}
+          |    "error_time": "${errorDateStr}",
+          |    "service_name": "${event.service_name}"
           |  },
-          |  "event_time": ${eventLogError.event_time},
-          |  "signature": ${eventLogError.signature},
-          |  "nonce": ${eventLogError.nonce},
+          |  "event_time": "${errorDateStr}",
+          |  "signature": "${eventLogError.signature}",
+          |  "nonce": "${eventLogError.nonce}",
           |  "lookup_keys": []
           |}
           |""".stripMargin
@@ -300,6 +310,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
 
       val mockIncidentListener = getMockInjectListener()
       val result: Either[Throwable, Incident] = mockIncidentListener.createIncidentFromCR(customerRecord, hardWareId, None)
+      println(result)
       result.isRight mustBe true
       result.right.foreach { incident =>
         incident.requestId mustBe Incident.UNKNOWN_REQUEST_ID
@@ -307,7 +318,6 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
         incident.errorCode mustBe None
         incident.error mustBe event.message
         incident.microservice mustBe event.service_name
-        incident.timestamp mustBe errorDate
       }
     }
 
@@ -319,7 +329,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val result: Either[Throwable, Incident] = mockIncidentListener.createIncidentFromCR(customerRecord, "", None)
       result.isLeft mustBe true
       result.swap.foreach { ex =>
-        ex mustBe IllegalArgumentException
+        assert(ex.isInstanceOf[IllegalArgumentException])
       }
     }
   }

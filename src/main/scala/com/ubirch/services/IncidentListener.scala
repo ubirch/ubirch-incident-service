@@ -91,6 +91,9 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
             case Some(device: SimpleDeviceInfo) =>
               logger.info(s"processing incident $incident for owner ${device.customerId} and forwarding it to mqtt")
               distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), device.customerId)
+            case None =>
+              logger.info(s"device not found. hwId: $hwId, authToken: $authToken")
+              false
           }
         }
         case Left(ex) => {
@@ -119,7 +122,7 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
     }
   }
 
-  private[services] def readFromCR[T](cr: ConsumerRecord[String, Array[Byte]]): Either[Throwable, T] = {
+  private[services] def readFromCR[T](cr: ConsumerRecord[String, Array[Byte]])(implicit mf : scala.reflect.Manifest[T]): Either[Throwable, T] = {
     Try {
       read[T](new ByteArrayInputStream(cr.value()))
     } match {
@@ -139,7 +142,7 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
   }
 
   private[services] def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, String] = {
-    val values = cr.headers().headers(headerKey).toSet
+    val values = cr.headers().headers(headerKey).toList
     values.size match {
       case 1 => Right(new String(values.head.value(), StandardCharsets.UTF_8))
       case _ => Left(HeaderError(values.size, headerKey))
