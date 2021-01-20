@@ -74,42 +74,20 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
 
   override val process: Process = Process.async(processing)
 
-  /*def processing(consumerRecords: Vector[ConsumerRecord[String, Array[Byte]]]): Future[Vector[Boolean]] = {
-
-    Future.sequence(consumerRecords.map { cr =>
-
-      try {
-        val hwId = retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
-        val authToken = retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
-        val incident = createIncidentFromCR(cr, hwId)
-
-        tenantRetriever.getDevice(hwId, authToken).map {
-
-          case Some(device: SimpleDeviceInfo) =>
-            logger.info(s"processing incident $incident for owner ${device.customerId} and forwarding it to mqtt")
-            distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), device.customerId)
-        }
-      } catch {
-        case ex: Throwable =>
-          logger.error(s"processing incident from consumerRecord with key ${cr.key()} from topic ${cr.topic()} failed ", ex)
-          Future.successful(false)
-      }
-    })
-  }*/
-
   def processing(consumerRecords: Vector[ConsumerRecord[String, Array[Byte]]]): Future[Vector[Boolean]] = {
 
     Future.sequence(consumerRecords.map { cr =>
 
+      // it's short circuit evaluation.
+      // if an error occurs in the for comprehension before yield is called, incident is not sent, Left is returned.
       (for {
         hwId <- retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
         authToken <- retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
         errorCodeOpt <- retrieveHeaderOpt(cr, HeaderKeys.X_CODE)
-      } yield (hwId, authToken, errorCodeOpt)) match {
-        case Right((hwId, authToken, errorCodeOpt)) => {
-          val incident = createIncidentFromCR(cr, hwId, errorCodeOpt)
+        incident <- createIncidentFromCR(cr, hwId, errorCodeOpt)
+      } yield (hwId, authToken, incident)) match {
+        case Right((hwId, authToken, incident)) => {
           tenantRetriever.getDevice(hwId, authToken).map {
-
             case Some(device: SimpleDeviceInfo) =>
               logger.info(s"processing incident $incident for owner ${device.customerId} and forwarding it to mqtt")
               distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), device.customerId)
@@ -124,28 +102,34 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
   }
 
 
-  private def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String, errorCodeOpt: Option[String]): Incident =
-    try {
-      cr.topic match {
-        case `niomonErrorTopic` =>
-          val nError = read[NiomonError](new ByteArrayInputStream(cr.value()))
+  private[services] def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String, errorCodeOpt: Option[String]): Either[Throwable, Incident] = {
+    cr.topic match {
+      case `niomonErrorTopic` =>
+        readFromCR[NiomonError](cr).map { nError =>
           Incident(nError.requestId, hwId, errorCodeOpt, nError.error, nError.microservice, new Date())
+        }
 
-        case `eventlogErrorTopic` =>
-          val eError = read[EventlogError](new ByteArrayInputStream(cr.value()))
-          Incident("request_Id_unknown", hwId, errorCodeOpt, eError.event.message, eError.event.service_name, eError.event.error_time)
+      case `eventlogErrorTopic` =>
+        readFromCR[EventlogError](cr).map { eError =>
+          Incident(Incident.UNKNOWN_REQUEST_ID, hwId, errorCodeOpt, eError.event.message, eError.event.service_name, eError.event.error_time)
+        }
 
-        case _ =>
-          throw new IllegalArgumentException(s"found unknown topic: ${cr.topic()} in incident handler")
-      }
-    } catch {
-      case ex: Throwable =>
-        logger.error("couldn't parse error from consumerRecord", ex)
-        throw ex
+      case _ =>
+        Left(new IllegalArgumentException(s"found unknown topic: ${cr.topic()} in incident handler"))
     }
+  }
+
+  private[services] def readFromCR[T](cr: ConsumerRecord[String, Array[Byte]]): Either[Throwable, T] = {
+    Try {
+      read[T](new ByteArrayInputStream(cr.value()))
+    } match {
+      case Success(value) => Right(value)
+      case Failure(err) => Left(ParseError(err.getMessage))
+    }
+  }
 
 
-  private def retrieveHeaderOpt(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, Option[String]] = {
+  private[services] def retrieveHeaderOpt(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, Option[String]] = {
     retrieveHeader(cr, headerKey) match {
       case Right(value) => Right(Some(value))
       case Left(err) =>
@@ -154,7 +138,7 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
     }
   }
 
-  private def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, String] = {
+  private[services] def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, String] = {
     val values = cr.headers().headers(headerKey).toSet
     values.size match {
       case 1 => Right(new String(values.head.value(), StandardCharsets.UTF_8))
@@ -164,5 +148,9 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
 
   case class HeaderError(headerNum: Int, headerKey: String) extends IllegalStateException {
     override def getMessage: String =  s"wrong number of $headerKey headers: ${headerNum}."
+  }
+
+  case class ParseError(errorMsg: String) extends RuntimeException {
+    override def getMessage: String = s"couldn't parse error from consumerRecord. ${errorMsg}"
   }
 }
