@@ -21,6 +21,7 @@ import java.util.Date
 import javax.inject.Inject
 import scala.collection.convert.ImplicitConversions.`iterable AsScalaIterable`
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRetriever: TenantRetriever,
                                  distributor: DistributorBase)
@@ -73,7 +74,7 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
 
   override val process: Process = Process.async(processing)
 
-  def processing(consumerRecords: Vector[ConsumerRecord[String, Array[Byte]]]): Future[Vector[Boolean]] = {
+  /*def processing(consumerRecords: Vector[ConsumerRecord[String, Array[Byte]]]): Future[Vector[Boolean]] = {
 
     Future.sequence(consumerRecords.map { cr =>
 
@@ -94,18 +95,45 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
           Future.successful(false)
       }
     })
+  }*/
+
+  def processing(consumerRecords: Vector[ConsumerRecord[String, Array[Byte]]]): Future[Vector[Boolean]] = {
+
+    Future.sequence(consumerRecords.map { cr =>
+
+      (for {
+        hwId <- retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
+        authToken <- retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
+        errorCodeOpt <- retrieveHeaderOpt(cr, HeaderKeys.X_CODE)
+      } yield (hwId, authToken, errorCodeOpt)) match {
+        case Right((hwId, authToken, errorCodeOpt)) => {
+          val incident = createIncidentFromCR(cr, hwId, errorCodeOpt)
+          tenantRetriever.getDevice(hwId, authToken).map {
+
+            case Some(device: SimpleDeviceInfo) =>
+              logger.info(s"processing incident $incident for owner ${device.customerId} and forwarding it to mqtt")
+              distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), device.customerId)
+          }
+        }
+        case Left(ex) => {
+          logger.error(s"processing incident from consumerRecord with key ${cr.key()} from topic ${cr.topic()} failed ", ex)
+          Future.successful(false)
+        }
+      }
+    })
   }
 
-  private def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String): Incident =
+
+  private def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String, errorCodeOpt: Option[String]): Incident =
     try {
       cr.topic match {
         case `niomonErrorTopic` =>
           val nError = read[NiomonError](new ByteArrayInputStream(cr.value()))
-          Incident(nError.requestId, hwId, nError.error, nError.microservice, new Date())
+          Incident(nError.requestId, hwId, errorCodeOpt, nError.error, nError.microservice, new Date())
 
         case `eventlogErrorTopic` =>
           val eError = read[EventlogError](new ByteArrayInputStream(cr.value()))
-          Incident("request_Id_unknown", hwId, eError.event.message, eError.event.service_name, eError.event.error_time)
+          Incident("request_Id_unknown", hwId, errorCodeOpt, eError.event.message, eError.event.service_name, eError.event.error_time)
 
         case _ =>
           throw new IllegalArgumentException(s"found unknown topic: ${cr.topic()} in incident handler")
@@ -117,9 +145,24 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
     }
 
 
-  private def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): String = {
+  private def retrieveHeaderOpt(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, Option[String]] = {
+    retrieveHeader(cr, headerKey) match {
+      case Right(value) => Right(Some(value))
+      case Left(err) =>
+        if(err.headerNum == 0) Right(None)
+        else Left(err)
+    }
+  }
+
+  private def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, String] = {
     val values = cr.headers().headers(headerKey).toSet
-    if (values.size != 1) throw new IllegalStateException(s"wrong number of $headerKey headers: ${values.size}.")
-    new String(values.head.value(), StandardCharsets.UTF_8)
+    values.size match {
+      case 1 => Right(new String(values.head.value(), StandardCharsets.UTF_8))
+      case _ => Left(HeaderError(values.size, headerKey))
+    }
+  }
+
+  case class HeaderError(headerNum: Int, headerKey: String) extends IllegalStateException {
+    override def getMessage: String =  s"wrong number of $headerKey headers: ${headerNum}."
   }
 }

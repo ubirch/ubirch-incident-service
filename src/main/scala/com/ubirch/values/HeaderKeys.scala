@@ -11,4 +11,5 @@ object HeaderKeys {
   val X_NIOMON_PURGE_CACHES: String = "X-Niomon-Purge-Caches".toLowerCase
   val CONTENT_TYPE: String = "Content-Type".toLowerCase
   val X_UBIRCH_DEVICE_INFO_TOKEN: String = "X-Ubirch-DeviceInfo-Token".toLowerCase
+  val X_CODE: String = "X-Code".toLowerCase
 }
