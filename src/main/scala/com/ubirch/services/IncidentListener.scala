@@ -142,11 +142,9 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
   }
 
   private[services] def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, String] = {
-    val values = cr.headers().headers(headerKey).toList
-    values.size match {
-      case 1 => Right(new String(values.head.value(), StandardCharsets.UTF_8))
-      case _ => Left(HeaderError(values.size, headerKey))
-    }
+    val values = cr.headers().headers(headerKey).toSet
+    if(values.size == 1) Right(new String(values.head.value(), StandardCharsets.UTF_8))
+    else Left(HeaderError(values.size, headerKey))
   }
 
   case class HeaderError(headerNum: Int, headerKey: String) extends IllegalStateException {

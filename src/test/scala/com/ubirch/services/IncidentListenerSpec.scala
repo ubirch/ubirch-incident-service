@@ -23,14 +23,12 @@ import org.json4s.JsonAST.{JObject, JString, JValue}
 import org.json4s.ext.{JavaTypesSerializers, JodaTimeSerializers}
 import org.json4s.jackson.Serialization.read
 import org.json4s.{DefaultFormats, Formats, JField}
-import org.scalatest.{FreeSpec, Matchers, MustMatchers}
+import org.scalatest.{FreeSpec, MustMatchers}
 import org.scalatest.mockito.MockitoSugar.mock
 import scredis.Redis
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
-import java.text.SimpleDateFormat
-import java.time.Instant
 import java.util.Date
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
@@ -131,6 +129,9 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
   }
 }
 
+/**
+ * Test code for the functions of the IncidentListener class
+ */
 class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
   implicit val ec = scala.concurrent.ExecutionContext.global
 
@@ -204,9 +205,11 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
 
     "(failure) multi headers exist " in {
       val mockIncidentListener = getMockInjectListener()
-      val errorCode = "errorCode"
-      val xCodeHeader = new RecordHeader(HeaderKeys.X_CODE, errorCode.getBytes)
-      val headers = new RecordHeaders().add(xCodeHeader).add(xCodeHeader)
+      val errorCode1 = "errorCode1"
+      val errorCode2 = "errorCode2"
+      val xCodeHeader1 = new RecordHeader(HeaderKeys.X_CODE, errorCode1.getBytes)
+      val xCodeHeader2 = new RecordHeader(HeaderKeys.X_CODE, errorCode2.getBytes)
+      val headers = new RecordHeaders().add(xCodeHeader1).add(xCodeHeader2)
       val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeaderOpt(customerRecord, HeaderKeys.X_CODE)
       result mustBe Left(mockIncidentListener.HeaderError(2, HeaderKeys.X_CODE))
@@ -217,8 +220,8 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
     "(success) header exists" in {
       val mockIncidentListener = getMockInjectListener()
       val hardWareId = "HardwareId"
-      val xCodeHeader = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId.getBytes)
-      val headers = new RecordHeaders().add(xCodeHeader)
+      val hwIdHeader = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId.getBytes)
+      val headers = new RecordHeaders().add(hwIdHeader)
       val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeader(customerRecord, HeaderKeys.X_UBIRCH_HARDWARE_ID)
       result mustBe Right(hardWareId)
@@ -234,9 +237,11 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
 
     "(failure) multi headers exist " in {
       val mockIncidentListener = getMockInjectListener()
-      val hardWareId = "HardwareId"
-      val xCodeHeader = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId.getBytes)
-      val headers = new RecordHeaders().add(xCodeHeader).add(xCodeHeader)
+      val hardWareId1 = "HardwareId1"
+      val hardWareId2 = "HardwareId2"
+      val hwIdHeader1 = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId1.getBytes)
+      val hwIdHeader2 = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId2.getBytes)
+      val headers = new RecordHeaders().add(hwIdHeader1).add(hwIdHeader2)
       val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeader(customerRecord, HeaderKeys.X_UBIRCH_HARDWARE_ID)
       result mustBe Left(mockIncidentListener.HeaderError(2, HeaderKeys.X_UBIRCH_HARDWARE_ID))
