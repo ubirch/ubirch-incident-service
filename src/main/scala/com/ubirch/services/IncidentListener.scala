@@ -78,8 +78,8 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
 
     Future.sequence(consumerRecords.map { cr =>
 
-      // it's short circuit evaluation.
-      // if an error occurs in the for comprehension before yield is called, incident is not sent, Left is returned.
+      // it's a short circuit evaluation.
+      // if an error occurs in the for-comprehension before yield is called, an incident is not sent, Left is returned.
       (for {
         hwId <- retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
         authToken <- retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)

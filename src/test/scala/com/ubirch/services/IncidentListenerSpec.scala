@@ -18,7 +18,6 @@ import org.apache.kafka.common.header.internals.{RecordHeader, RecordHeaders}
 import org.apache.kafka.common.record.TimestampType
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer}
 import org.joda.time.DateTime
-import org.joda.time.format.DateTimeFormat
 import org.json4s.JsonAST.{JObject, JString, JValue}
 import org.json4s.ext.{JavaTypesSerializers, JodaTimeSerializers}
 import org.json4s.jackson.Serialization.read
@@ -29,7 +28,8 @@ import scredis.Redis
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
-import java.util.Date
+import java.text.SimpleDateFormat
+import java.util.{Date, TimeZone}
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 
@@ -178,7 +178,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
     "(success) read NiomonError" in {
       val mockIncidentListener = getMockInjectListener()
       val niomonValue = niomonErrorJson1.getBytes(StandardCharsets.UTF_8)
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, "", niomonValue)
+      val customerRecord = new ConsumerRecord("", 0, 0, "", niomonValue)
       val result: Either[Throwable, NiomonError] = mockIncidentListener.readFromCR[NiomonError](customerRecord)
       result mustBe Right(niomonError)
     }
@@ -190,7 +190,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val errorCode = "errorCode"
       val xCodeHeader = new RecordHeader(HeaderKeys.X_CODE, errorCode.getBytes)
       val headers = new RecordHeaders().add(xCodeHeader)
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
+      val customerRecord = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeaderOpt(customerRecord, HeaderKeys.X_CODE)
       result mustBe Right(Some(errorCode))
     }
@@ -198,7 +198,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
     "(success) header doesn't exist" in {
       val mockIncidentListener = getMockInjectListener()
       val headers = new RecordHeaders()
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
+      val customerRecord = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeaderOpt(customerRecord, HeaderKeys.X_CODE)
       result mustBe Right(None)
     }
@@ -210,7 +210,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val xCodeHeader1 = new RecordHeader(HeaderKeys.X_CODE, errorCode1.getBytes)
       val xCodeHeader2 = new RecordHeader(HeaderKeys.X_CODE, errorCode2.getBytes)
       val headers = new RecordHeaders().add(xCodeHeader1).add(xCodeHeader2)
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
+      val customerRecord = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeaderOpt(customerRecord, HeaderKeys.X_CODE)
       result mustBe Left(mockIncidentListener.HeaderError(2, HeaderKeys.X_CODE))
     }
@@ -222,7 +222,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val hardWareId = "HardwareId"
       val hwIdHeader = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId.getBytes)
       val headers = new RecordHeaders().add(hwIdHeader)
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
+      val customerRecord = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeader(customerRecord, HeaderKeys.X_UBIRCH_HARDWARE_ID)
       result mustBe Right(hardWareId)
     }
@@ -230,7 +230,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
     "(failure) header doesn't exist" in {
       val mockIncidentListener = getMockInjectListener()
       val headers = new RecordHeaders()
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
+      val customerRecord = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeader(customerRecord, HeaderKeys.X_UBIRCH_HARDWARE_ID)
       result mustBe Left(mockIncidentListener.HeaderError(0, HeaderKeys.X_UBIRCH_HARDWARE_ID))
     }
@@ -242,7 +242,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val hwIdHeader1 = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId1.getBytes)
       val hwIdHeader2 = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId2.getBytes)
       val headers = new RecordHeaders().add(hwIdHeader1).add(hwIdHeader2)
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
+      val customerRecord = new ConsumerRecord("", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
       val result = mockIncidentListener.retrieveHeader(customerRecord, HeaderKeys.X_UBIRCH_HARDWARE_ID)
       result mustBe Left(mockIncidentListener.HeaderError(2, HeaderKeys.X_UBIRCH_HARDWARE_ID))
     }
@@ -265,7 +265,7 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val xCodeHeader = new RecordHeader(HeaderKeys.X_CODE, errorCode.getBytes)
       val niomonValue = niomonErrorJson.getBytes(StandardCharsets.UTF_8)
       val headers = new RecordHeaders().add(xCodeHeader).add(hwIdHeader)
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord(niomonErrorTopic, 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", niomonValue, headers)
+      val customerRecord = new ConsumerRecord(niomonErrorTopic, 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", niomonValue, headers)
 
       val mockIncidentListener = getMockInjectListener()
       val result: Either[Throwable, Incident] = mockIncidentListener.createIncidentFromCR(customerRecord, hardWareId, Some(errorCode))
@@ -280,9 +280,10 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
     }
 
     "(success) create EventLogError incident" in {
-      val errorDateStr = "2020-12-01T08:52:09.484Z"
-      val formatter = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-      val errorDate = formatter.parseDateTime(errorDateStr).toDate
+      val errorDateStr = "2020-12-01T00:00:00.000Z"
+      val formatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+      formatter.setTimeZone(TimeZone.getTimeZone("UTC"))
+      val errorDate = formatter.parse(errorDateStr)
       val event = Event("", "Error in the Encoding Process: No CustomerId found", "", JString(""), errorDate, "event-log-service")
       val eventLogError = EventlogError(JObject(List.empty[JField]), "", "", "", "", event, errorDate, "", "", Seq.empty[JValue])
 
@@ -311,11 +312,10 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       val hwIdHeader = new RecordHeader(HeaderKeys.X_UBIRCH_HARDWARE_ID, hardWareId.getBytes)
       val eventLogValue = eventLogErrorJson.getBytes(StandardCharsets.UTF_8)
       val headers = new RecordHeaders().add(hwIdHeader)
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord(eventLogErrorTopic, 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", eventLogValue, headers)
+      val customerRecord = new ConsumerRecord(eventLogErrorTopic, 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", eventLogValue, headers)
 
       val mockIncidentListener = getMockInjectListener()
       val result: Either[Throwable, Incident] = mockIncidentListener.createIncidentFromCR(customerRecord, hardWareId, None)
-      println(result)
       result.isRight mustBe true
       result.right.foreach { incident =>
         incident.requestId mustBe Incident.UNKNOWN_REQUEST_ID
@@ -323,13 +323,14 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
         incident.errorCode mustBe None
         incident.error mustBe event.message
         incident.microservice mustBe event.service_name
+        incident.timestamp mustBe event.error_time
       }
     }
 
     "(failure) unknown topic" in {
       val mockIncidentListener = getMockInjectListener()
       val headers = new RecordHeaders()
-      val customerRecord: ConsumerRecord[String, Array[Byte]] = new ConsumerRecord("unknown topic", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
+      val customerRecord = new ConsumerRecord("unknown topic", 0, 0, 0, TimestampType.NO_TIMESTAMP_TYPE, 0L, 0, 0, "", Array.emptyByteArray, headers)
 
       val result: Either[Throwable, Incident] = mockIncidentListener.createIncidentFromCR(customerRecord, "", None)
       result.isLeft mustBe true
@@ -338,5 +339,4 @@ class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
       }
     }
   }
-
 }
