@@ -21,6 +21,7 @@ import java.util.Date
 import javax.inject.Inject
 import scala.collection.convert.ImplicitConversions.`iterable AsScalaIterable`
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRetriever: TenantRetriever,
                                  distributor: DistributorBase)
@@ -77,49 +78,80 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
 
     Future.sequence(consumerRecords.map { cr =>
 
-      try {
-        val hwId = retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
-        val authToken = retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
-        val incident = createIncidentFromCR(cr, hwId)
-
-        tenantRetriever.getDevice(hwId, authToken).map {
-
-          case Some(device: SimpleDeviceInfo) =>
-            logger.info(s"processing incident $incident for owner ${device.customerId} and forwarding it to mqtt")
-            distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), device.customerId)
+      // it's a short circuit evaluation.
+      // if an error occurs in the for-comprehension before yield is called, an incident is not sent, Left is returned.
+      (for {
+        hwId <- retrieveHeader(cr, HeaderKeys.X_UBIRCH_HARDWARE_ID)
+        authToken <- retrieveHeader(cr, HeaderKeys.X_UBIRCH_DEVICE_INFO_TOKEN)
+        errorCodeOpt <- retrieveHeaderOpt(cr, HeaderKeys.X_CODE)
+        incident <- createIncidentFromCR(cr, hwId, errorCodeOpt)
+      } yield (hwId, authToken, incident)) match {
+        case Right((hwId, authToken, incident)) => {
+          tenantRetriever.getDevice(hwId, authToken).map {
+            case Some(device: SimpleDeviceInfo) =>
+              logger.info(s"processing incident $incident for owner ${device.customerId} and forwarding it to mqtt")
+              distributor.sendIncident(write(incident).getBytes(StandardCharsets.UTF_8), device.customerId)
+            case None =>
+              logger.info(s"device not found. hwId: $hwId, authToken: $authToken")
+              false
+          }
         }
-      } catch {
-        case ex: Throwable =>
+        case Left(ex) => {
           logger.error(s"processing incident from consumerRecord with key ${cr.key()} from topic ${cr.topic()} failed ", ex)
           Future.successful(false)
+        }
       }
     })
   }
 
-  private def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String): Incident =
-    try {
-      cr.topic match {
-        case `niomonErrorTopic` =>
-          val nError = read[NiomonError](new ByteArrayInputStream(cr.value()))
-          Incident(nError.requestId, hwId, nError.error, nError.microservice, new Date())
 
-        case `eventlogErrorTopic` =>
-          val eError = read[EventlogError](new ByteArrayInputStream(cr.value()))
-          Incident("request_Id_unknown", hwId, eError.event.message, eError.event.service_name, eError.event.error_time)
+  private[services] def createIncidentFromCR(cr: ConsumerRecord[String, Array[Byte]], hwId: String, errorCodeOpt: Option[String]): Either[Throwable, Incident] = {
+    cr.topic match {
+      case `niomonErrorTopic` =>
+        readFromCR[NiomonError](cr).map { nError =>
+          Incident(nError.requestId, hwId, errorCodeOpt, nError.error, nError.microservice, new Date())
+        }
 
-        case _ =>
-          throw new IllegalArgumentException(s"found unknown topic: ${cr.topic()} in incident handler")
-      }
-    } catch {
-      case ex: Throwable =>
-        logger.error("couldn't parse error from consumerRecord", ex)
-        throw ex
+      case `eventlogErrorTopic` =>
+        readFromCR[EventlogError](cr).map { eError =>
+          Incident(Incident.UNKNOWN_REQUEST_ID, hwId, errorCodeOpt, eError.event.message, eError.event.service_name, eError.event.error_time)
+        }
+
+      case _ =>
+        Left(new IllegalArgumentException(s"found unknown topic: ${cr.topic()} in incident handler"))
     }
+  }
+
+  private[services] def readFromCR[T](cr: ConsumerRecord[String, Array[Byte]])(implicit mf : scala.reflect.Manifest[T]): Either[Throwable, T] = {
+    Try {
+      read[T](new ByteArrayInputStream(cr.value()))
+    } match {
+      case Success(value) => Right(value)
+      case Failure(err) => Left(ParseError(err.getMessage))
+    }
+  }
 
 
-  private def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): String = {
+  private[services] def retrieveHeaderOpt(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, Option[String]] = {
+    retrieveHeader(cr, headerKey) match {
+      case Right(value) => Right(Some(value))
+      case Left(err) =>
+        if(err.headerNum == 0) Right(None)
+        else Left(err)
+    }
+  }
+
+  private[services] def retrieveHeader(cr: ConsumerRecord[String, Array[Byte]], headerKey: String): Either[HeaderError, String] = {
     val values = cr.headers().headers(headerKey).toSet
-    if (values.size != 1) throw new IllegalStateException(s"wrong number of $headerKey headers: ${values.size}.")
-    new String(values.head.value(), StandardCharsets.UTF_8)
+    if(values.size == 1) Right(new String(values.head.value(), StandardCharsets.UTF_8))
+    else Left(HeaderError(values.size, headerKey))
+  }
+
+  case class HeaderError(headerNum: Int, headerKey: String) extends IllegalStateException {
+    override def getMessage: String =  s"wrong number of $headerKey headers: ${headerNum}."
+  }
+
+  case class ParseError(errorMsg: String) extends RuntimeException {
+    override def getMessage: String = s"couldn't parse error from consumerRecord. ${errorMsg}"
   }
 }
