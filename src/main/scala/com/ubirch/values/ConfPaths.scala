@@ -57,6 +57,7 @@ object ConfPaths {
     final val USER_NAME = "incidentService.mqttDistributor.userName"
     final val PASSWORD = "incidentService.mqttDistributor.password"
     final val QUEUE_PREFIX = "incidentService.mqttDistributor.queuePrefix"
+    final val MAX_INFLIGHT_MESSAGES = "incidentService.mqttDistributor.maxInflightMessages"
   }
 
   object IncidentConsumerConf extends IncidentConsumerConf

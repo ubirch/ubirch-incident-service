@@ -19,6 +19,7 @@ class MQTTClientProvider @Inject()(lifeCycle: Lifecycle, config: Config) extends
   private val clientId: String = config.getString(MqttDistributorConf.CLIENT_ID) + UUID.randomUUID().toString
   private val userName: String = config.getString(MqttDistributorConf.USER_NAME)
   private val password: String = config.getString(MqttDistributorConf.PASSWORD)
+  private val inflightMessages: Int = config.getInt(MqttDistributorConf.MAX_INFLIGHT_MESSAGES)
   private val mqttClient: MqttAsyncClient = getClient
 
   def getClient: MqttAsyncClient = {
@@ -30,6 +31,7 @@ class MQTTClientProvider @Inject()(lifeCycle: Lifecycle, config: Config) extends
       connOpts.setUserName(userName)
       connOpts.setPassword(password.toCharArray)
       connOpts.setCleanSession(true)
+      connOpts.setMaxInflight(inflightMessages)
       client.connect(connOpts)
       logger.info(s"MQTT Client successfully connected.")
       client
