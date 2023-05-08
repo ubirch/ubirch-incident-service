@@ -9,6 +9,7 @@ import com.ubirch.models.{EventlogError, Incident, NiomonError, SimpleDeviceInfo
 import com.ubirch.util.Lifecycle
 import com.ubirch.values.ConfPaths.{IncidentConsumerConf, IncidentProducerConf}
 import com.ubirch.values.HeaderKeys
+import monix.execution.Scheduler
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.serialization._
 import org.json4s.ext.{JavaTypesSerializers, JodaTimeSerializers}
@@ -32,6 +33,7 @@ class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRet
     with LazyLogging {
 
   implicit val json4sJacksonFormats: Formats = DefaultFormats.lossless ++ JavaTypesSerializers.all ++ JodaTimeSerializers.all
+  implicit val scheduler: Scheduler = Scheduler(ec)
 
   lifecycle.addStopHooks(hookFunc(consumerGracefulTimeout, consumption), hookFunc(production))
 
