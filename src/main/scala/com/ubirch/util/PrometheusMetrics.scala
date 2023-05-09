@@ -22,7 +22,7 @@ class PrometheusMetrics @Inject()(config: Config, lifecycle: Lifecycle) extends 
 
   logger.debug("Creating Prometheus Server on Port[{}]", port)
 
-  val server: HTTPServer = PrometheusMetricsHelper.defaultWithJXM(port)
+  val server: HTTPServer = PrometheusMetricsHelper.default(port)
 
   lifecycle.addStopHook { () =>
     logger.info("Shutting down Prometheus")
