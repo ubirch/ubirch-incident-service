@@ -21,19 +21,18 @@ import java.nio.charset.StandardCharsets
 import java.util.Date
 import javax.inject.Inject
 import scala.collection.convert.ImplicitConversions.`iterable AsScalaIterable`
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 class IncidentListener @Inject()(config: Config, lifecycle: Lifecycle, tenantRetriever: TenantRetriever,
                                  distributor: DistributorBase)
-                                (implicit val ec: ExecutionContext)
+                                (implicit val scheduler: Scheduler)
   extends ExpressKafka[String, Array[Byte], Vector[Boolean]]
     with WithConsumerShutdownHook
     with WithProducerShutdownHook
     with LazyLogging {
 
   implicit val json4sJacksonFormats: Formats = DefaultFormats.lossless ++ JavaTypesSerializers.all ++ JodaTimeSerializers.all
-  implicit val scheduler: Scheduler = Scheduler(ec)
 
   lifecycle.addStopHooks(hookFunc(consumerGracefulTimeout, consumption), hookFunc(production))
 

@@ -2,6 +2,7 @@ package com.ubirch.provider
 
 import com.typesafe.config.Config
 import com.ubirch.values.ConfPaths.ServiceConf
+import monix.execution.Scheduler
 
 import java.util.concurrent.Executors
 import javax.inject._
@@ -26,3 +27,16 @@ class ExecutionProvider @Inject()(config: Config) extends Provider[ExecutionCont
 
 }
 
+
+/**
+ * Represents the Scheduler Provider
+ * @param ec Represents the execution context for async processes.
+ */
+@Singleton
+class SchedulerProvider @Inject() (ec: ExecutionContext) extends Provider[Scheduler] {
+
+  implicit val scheduler: Scheduler = monix.execution.Scheduler(ec)
+
+  override def get(): Scheduler = scheduler
+
+}

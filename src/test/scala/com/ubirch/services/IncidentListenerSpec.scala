@@ -35,6 +35,7 @@ import scala.concurrent.Future
 
 class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLogging {
 
+  implicit val scheduler = monix.execution.Scheduler.Implicits.global
 
   private def FakeInjector(bootstrapServers: String, niomonErrorTopic: String, eventlogErrorTopic: String): InjectorHelper =
     new InjectorHelper(List(new Binder {
@@ -133,7 +134,7 @@ class IncidentListenerSpec extends TestBase with EmbeddedKafka with StrictLoggin
  * Test code for the functions of the IncidentListener class
  */
 class IncidentListenerFuncSpec extends FreeSpec with MustMatchers {
-  implicit val ec = scala.concurrent.ExecutionContext.global
+  implicit val scheduler = monix.execution.Scheduler.Implicits.global
 
   val niomonErrorTopic = "ubirch-niomon-error-json"
   val eventLogErrorTopic = "ubirch-svalbard-evt-error-json"

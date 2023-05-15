@@ -3,8 +3,9 @@ package com.ubirch.util
 import com.google.inject.binder.ScopedBindingBuilder
 import com.google.inject.{AbstractModule, Module}
 import com.typesafe.config.Config
-import com.ubirch.provider.{ConfigProvider, ExecutionProvider, MQTTClientProvider, RedisProvider}
+import com.ubirch.provider.{ConfigProvider, ExecutionProvider, MQTTClientProvider, RedisProvider, SchedulerProvider}
 import com.ubirch.services.{DistributorBase, PahoDistributor}
+import monix.execution.Scheduler
 import org.eclipse.paho.client.mqttv3.MqttAsyncClient
 import scredis.Redis
 
@@ -15,6 +16,8 @@ class Binder extends AbstractModule {
   def config: ScopedBindingBuilder = bind(classOf[Config]).toProvider(classOf[ConfigProvider])
 
   def executionContext: ScopedBindingBuilder = bind(classOf[ExecutionContext]).toProvider(classOf[ExecutionProvider])
+
+  def scheduler: ScopedBindingBuilder = bind(classOf[Scheduler]).toProvider(classOf[SchedulerProvider])
 
   def jvmHook: ScopedBindingBuilder = bind(classOf[JVMHook]).to(classOf[DefaultJVMHook])
 
@@ -29,6 +32,7 @@ class Binder extends AbstractModule {
   def configure(): Unit = {
     config
     executionContext
+    scheduler
     jvmHook
     lifecycle
     redis
